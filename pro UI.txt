@@ -1,0 +1,1171 @@
+-- LinoriaLib Setup
+local repo = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
+
+local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
+local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
+local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
+
+-- Main Window
+local Window = Library:CreateWindow({
+    Title = 'Nigger',
+    Center = true,
+    AutoShow = true,
+    TabPadding = 8,
+    MenuFadeTime = 0.2
+})
+
+-- Tabs
+local Tabs = {
+    Main = Window:AddTab("Main"),
+    UISettings = Window:AddTab("UI Settings"),
+}
+
+-- UI Settings Tab: Menu groupbox
+local MenuGroup = Tabs.UISettings:AddLeftGroupbox('Menu')
+MenuGroup:AddButton('Unload', function() Library:Unload() end)
+MenuGroup:AddLabel('Menu bind'):AddKeyPicker('MenuKeybind', {
+    Default = 'Insert',
+    NoUI = true,
+    Text = 'Menu keybind'
+})
+Library.ToggleKeybind = Options and Options.MenuKeybind
+
+-- Theme and Config Support
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({ 'MenuKeybind' })
+
+ThemeManager:SetFolder('Qnygz')
+SaveManager:SetFolder('Qnygz/DaHood')
+
+SaveManager:BuildConfigSection(Tabs.UISettings) -- right side
+ThemeManager:ApplyToTab(Tabs.UISettings) -- left side
+
+-- Auto-load last config
+SaveManager:LoadAutoloadConfig()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+local PlayerGroup = Tabs.Main:AddRightGroupbox("Player")
+local CframeGroup = Tabs.Main:AddRightGroupbox("Cframe Speed")
+local CfGroup = Tabs.Main:AddRightGroupbox("Cframe Fly")
+
+local cframeEnabled = false
+local slipperyEnabled = false
+local SpeedValue = 100
+
+local humanoid
+local originalWalkSpeed = 16
+local heartbeatConnection
+local characterAddedConnection
+local cframeConnection
+
+local keysDown = {}
+
+-- Track keyboard input for movement keys
+UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        keysDown[input.KeyCode] = true
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        keysDown[input.KeyCode] = nil
+    end
+end)
+
+-- Setup humanoid and connections
+local function setupHumanoid()
+    local char = player.Character or player.CharacterAdded:Wait()
+    humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        originalWalkSpeed = humanoid.WalkSpeed
+    end
+
+    -- Re-apply slippery speed if enabled when WalkSpeed changes externally
+    if humanoid then
+        humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+            if slipperyEnabled and humanoid then
+                if humanoid.WalkSpeed ~= SpeedValue then
+                    humanoid.WalkSpeed = SpeedValue
+                end
+            end
+        end)
+    end
+end
+
+local function startSlipperySpeed()
+    if not humanoid or not humanoid.Parent then
+        setupHumanoid()
+    end
+    if humanoid then
+        humanoid.WalkSpeed = SpeedValue
+    end
+    if characterAddedConnection then characterAddedConnection:Disconnect() end
+    characterAddedConnection = player.CharacterAdded:Connect(function(char)
+        wait(1)
+        setupHumanoid()
+        if slipperyEnabled and humanoid then
+            humanoid.WalkSpeed = SpeedValue
+        end
+    end)
+    if heartbeatConnection then heartbeatConnection:Disconnect() end
+    heartbeatConnection = RunService.Heartbeat:Connect(function()
+        if slipperyEnabled and humanoid and humanoid.Parent then
+            if humanoid.WalkSpeed ~= SpeedValue then
+                humanoid.WalkSpeed = SpeedValue
+            end
+        end
+    end)
+end
+
+local function stopSlipperySpeed()
+    if heartbeatConnection then
+        heartbeatConnection:Disconnect()
+        heartbeatConnection = nil
+    end
+    if characterAddedConnection then
+        characterAddedConnection:Disconnect()
+        characterAddedConnection = nil
+    end
+    if humanoid and humanoid.Parent then
+        humanoid.WalkSpeed = originalWalkSpeed or 16
+    end
+end
+
+local function startCFrameSpeed()
+    if cframeConnection then cframeConnection:Disconnect() end
+    cframeConnection = RunService.RenderStepped:Connect(function(dt)
+        if not cframeEnabled then return end
+        local char = player.Character
+        if not char then return end
+
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        local camCF = workspace.CurrentCamera.CFrame
+        local moveDir = Vector3.new()
+
+        if keysDown[Enum.KeyCode.W] then moveDir += camCF.LookVector end
+        if keysDown[Enum.KeyCode.S] then moveDir -= camCF.LookVector end
+        if keysDown[Enum.KeyCode.A] then moveDir -= camCF.RightVector end
+        if keysDown[Enum.KeyCode.D] then moveDir += camCF.RightVector end
+
+        if moveDir.Magnitude > 0 then
+            moveDir = Vector3.new(moveDir.X, 0, moveDir.Z).Unit
+            hrp.CFrame = hrp.CFrame + moveDir * SpeedValue * dt
+        end
+    end)
+end
+
+local function stopCFrameSpeed()
+    if cframeConnection then
+        cframeConnection:Disconnect()
+        cframeConnection = nil
+    end
+end
+
+local function updateSpeedState()
+    if cframeEnabled and slipperyEnabled then
+        -- If both enabled, just turn off both to avoid conflicts
+        cframeEnabled = false
+        slipperyEnabled = false
+        library:SetValue("ToggleCframe", false)
+        library:SetValue("Toggleslippery", false)
+        stopCFrameSpeed()
+        stopSlipperySpeed()
+        return
+    end
+
+    if cframeEnabled then
+        startCFrameSpeed()
+        stopSlipperySpeed()
+    elseif slipperyEnabled then
+        stopCFrameSpeed()
+        startSlipperySpeed()
+    else
+        stopCFrameSpeed()
+        stopSlipperySpeed()
+    end
+end
+
+-- Add Toggles & Keybinds with callbacks calling updateSpeedState
+
+CframeGroup:AddToggle("ToggleCframe", {
+    Text = "Cframe Speed",
+    Default = false,
+    Flag = "ToggleCframe",
+    Callback = function(state)
+        cframeEnabled = state
+        updateSpeedState()
+    end,
+}):AddKeyPicker("Toggle1Keycframe", {
+    Default = "None",
+    Flag = "Toggle1Keycframe",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "Togglekeybindcframe",
+    Callback = function(state)
+        cframeEnabled = state
+        library:SetValue("ToggleCframe", state)
+        updateSpeedState()
+    end,
+})
+
+PlayerGroup:AddToggle("Toggleslippery", {
+    Text = "Slippery Speed",
+    Default = false,
+    Flag = "Toggleslippery",
+    Callback = function(state)
+        slipperyEnabled = state
+        updateSpeedState()
+    end,
+}):AddKeyPicker("Togglekeybindslippery", {
+    Default = "None",
+    Flag = "Togglekeybindslippery",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "Toggleslippery",
+    Callback = function(state)
+        slipperyEnabled = state
+        library:SetValue("Toggleslippery", state)
+        updateSpeedState()
+    end,
+})
+
+-- Also handle keyboard toggles so they update the library flags and callbacks
+
+UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        local cframeKeyName = library.Flags["Toggle1Keycframe"]
+        if cframeKeyName and input.KeyCode == Enum.KeyCode[cframeKeyName] then
+            local newState = not library.Flags["ToggleCframe"]
+            library:SetValue("ToggleCframe", newState)
+            -- Callback will handle updating cframeEnabled and starting/stopping speed
+        end
+
+        local slipperyKeyName = library.Flags["Togglekeybindslippery"]
+        if slipperyKeyName and input.KeyCode == Enum.KeyCode[slipperyKeyName] then
+            local newState = not library.Flags["Toggleslippery"]
+            library:SetValue("Toggleslippery", newState)
+            -- Callback will handle updating slipperyEnabled and starting/stopping speed
+        end
+    end
+end)
+
+
+local flightEnabled = false
+local flightValue = 16
+
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local LocalPlayer = game.Players.LocalPlayer
+
+local hoverHeight = nil
+local bindsEnabled = true
+
+local function resetFlight()
+    local char = LocalPlayer.Character
+    if char then
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.PlatformStand = false
+        end
+    end
+end
+
+local function antiFlingActivate()
+    local char = LocalPlayer.Character
+    if char then
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if hrp and humanoid then
+            humanoid.PlatformStand = true
+            hrp.Velocity = Vector3.new(0, 0, 0)
+        end
+    end
+end
+
+local function antiFlingReset()
+    local char = LocalPlayer.Character
+    if char then
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.PlatformStand = false
+        end
+    end
+end
+
+local function setFlightCFrame()
+    if not flightEnabled then return end
+
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not humanoid then return end
+
+    humanoid.PlatformStand = true
+    local delta = RunService.Heartbeat:Wait() or 0.016
+    local camCF = workspace.CurrentCamera.CFrame
+
+    if targetStrafeEnabled and aiming and targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild(aimPartName) then
+        local targetPart = targetPlayer.Character[aimPartName]
+
+        local angle = tick() * targetStrafeSpeed
+        local offset = Vector3.new(
+            math.sin(angle) * targetStrafeDistance,
+            targetStrafeHeight,
+            math.cos(angle) * targetStrafeDistance
+        )
+
+        local basePos = targetPart.Position
+        local strafePos = basePos + offset
+        local direction = (targetPart.Position - hrp.Position).Unit
+        direction = Vector3.new(direction.X, 0, direction.Z)
+
+        local desiredCFrame = CFrame.new(strafePos, strafePos + direction)
+        hrp.CFrame = desiredCFrame
+        hrp.Velocity = Vector3.zero
+        hrp.RotVelocity = Vector3.zero
+        return
+    end
+
+    local moveDir = Vector3.new()
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+        moveDir = moveDir + Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+        moveDir = moveDir - Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+        moveDir = moveDir - Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z)
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+        moveDir = moveDir + Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z)
+    end
+
+    local verticalDir = 0
+    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+        verticalDir = 1
+    elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+        verticalDir = -1
+    end
+
+    hoverHeight = hoverHeight or hrp.Position.Y
+
+    if verticalDir ~= 0 then
+        hoverHeight = hoverHeight + verticalDir * flightValue * delta
+    end
+
+    if moveDir.Magnitude > 0 then
+        moveDir = moveDir.Unit * flightValue * delta
+    else
+        moveDir = Vector3.zero
+    end
+
+    local newPos = hrp.Position + Vector3.new(moveDir.X, 0, moveDir.Z)
+    hrp.CFrame = CFrame.new(newPos.X, hoverHeight, newPos.Z)
+    hrp.Velocity = Vector3.zero
+    hrp.RotVelocity = Vector3.zero
+end
+
+RunService.Heartbeat:Connect(function()
+    if speedV2Enabled then
+        setSpeedCFrame()
+    end
+    if flightEnabled then
+        setFlightCFrame()
+    else
+        resetFlight()
+        hoverHeight = nil
+    end
+end)
+
+CfGroup:AddToggle("FlightCFrameToggle", {
+    Text = "Flight CFrame",
+    Default = false,
+    Tooltip = "Toggles CFrame-based flight",
+    Callback = function(state)
+        flightEnabled = state
+        Library:Notify("Flight CFrame - " .. (state and "Enabled" or "Disabled"), 3)
+        if not state then
+            antiFlingActivate()
+            task.spawn(function()
+                task.wait(0.01)
+                antiFlingReset()
+                task.wait(2)
+                antiFlingReset()
+            end)
+            resetFlight()
+        end
+    end,
+}):AddKeyPicker("FlightCFrameToggleKey", {
+    Default = "None",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "Flight Key",
+    Tooltip = "Toggle Flight with key",
+    Callback = function(state)
+        if bindsEnabled then
+            Toggles.FlightCFrameToggle:SetValue(state)
+        end
+    end,
+})
+
+CframeGroup:AddSlider("slidercframe", {
+    Text = "Cframe Speed",
+    Default = 50,
+    Min = 16,
+    Max = 500,
+    Rounding = 2,
+    Callback = function(value)
+        SpeedValue = value
+    end,
+})
+
+PlayerGroup:AddSlider("sliderslippery", {
+    Text = "Slippery Speed",
+    Default = 50,
+    Min = 0,
+    Max = 500,
+    Rounding = 2,
+    Callback = function(value)
+        SpeedValue = value
+        if slipperyEnabled and humanoid then
+            humanoid.WalkSpeed = value
+        end
+    end,
+})
+
+CfGroup:AddSlider("FlightAmountSlider", {
+    Text = "Flight Amount",
+    Min = 1,
+    Max = 1000,
+    Default = 16,
+    Rounding = 0,
+    Callback = function(value)
+        flightValue = value
+    end
+})
+
+
+-- Keybind logic for toggles (optional)
+UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        -- Toggle Cframe Speed by keybind
+        local cframeKey = library.Flags["Toggle1Keycframe"]
+        if cframeKey and input.KeyCode == Enum.KeyCode[cframeKey] then
+            cframeEnabled = not cframeEnabled
+            library:SetValue("ToggleCframe", cframeEnabled)
+            updateSpeedState()
+        end
+        -- Toggle Slippery Speed by keybind
+        local slipperyKey = library.Flags["Togglekeybindslippery"]
+        if slipperyKey and input.KeyCode == Enum.KeyCode[slipperyKey] then
+            slipperyEnabled = not slipperyEnabled
+            library:SetValue("Toggleslippery", slipperyEnabled)
+            updateSpeedState()
+        end
+    end
+end)
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local localPlayer = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- Combat Tab: Aimbot groupbox
+local CombatGroup = Tabs.Main:AddLeftGroupbox('Aimbot')
+
+-- Aimbot settings
+local aimbotEnabled = false
+local smoothness = 0.5
+local prediction = 0.1
+local targetPart = "HumanoidRootPart"
+local orbitEnabled = false
+local orbitSpeed = 10
+local orbitRadius = 5
+local orbitHeight = 3
+
+local targetPlayer = nil
+
+local function getClosestTarget()
+    local mouse = localPlayer:GetMouse()
+    local mousePos = Vector2.new(mouse.X, mouse.Y)
+    local closestDist = math.huge
+    local closest = nil
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= localPlayer and player.Character and player.Character:FindFirstChild(targetPart) then
+            local part = player.Character[targetPart]
+            local screenPos, onScreen = camera:WorldToViewportPoint(part.Position)
+            if onScreen then
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                if dist < closestDist then
+                    closestDist = dist
+                    closest = player
+                end
+            end
+        end
+    end
+    return closest
+end
+
+RunService.RenderStepped:Connect(function()
+    local char = localPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    if aimbotEnabled then
+        if not targetPlayer or not targetPlayer.Character or not targetPlayer.Character:FindFirstChild(targetPart) then
+            targetPlayer = getClosestTarget()
+        end
+
+        if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild(targetPart) then
+            local targetPartObj = targetPlayer.Character[targetPart]
+            local predictedPos = targetPartObj.Position + (targetPartObj.Velocity * prediction)
+
+            if smoothness >= 1 then
+                camera.CFrame = CFrame.lookAt(camera.CFrame.Position, predictedPos)
+            else
+                local currentLook = camera.CFrame.LookVector
+                local desiredLook = (predictedPos - camera.CFrame.Position).Unit
+                local newLook = currentLook:Lerp(desiredLook, smoothness)
+                camera.CFrame = CFrame.new(camera.CFrame.Position, camera.CFrame.Position + newLook)
+            end
+
+            if orbitEnabled then
+                local angle = tick() * orbitSpeed
+                local offsetX = math.cos(angle) * orbitRadius
+                local offsetZ = math.sin(angle) * orbitRadius
+                hrp.CFrame = CFrame.new(predictedPos.X + offsetX, predictedPos.Y + orbitHeight, predictedPos.Z + offsetZ)
+            end
+        else
+            targetPlayer = nil
+        end
+    else
+        targetPlayer = nil
+    end
+end)
+
+-- Aimbot UI
+CombatGroup:AddToggle("aimbotToggle", {
+    Text = "Aimbot",
+    Default = false,
+    Tooltip = "Toggle Aimbot On/Off",
+    Callback = function(state)
+        aimbotEnabled = state
+        if not state then targetPlayer = nil end
+    end,
+}):AddKeyPicker("aimbotToggleKey", {
+    Default = "None",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "Aimbot Keybind",
+    Tooltip = "Toggle Aimbot using this keybind",
+    Callback = function(state)
+        aimbotEnabled = state
+        if not state then targetPlayer = nil end
+    end,
+})
+
+CombatGroup:AddSlider("aimbotSmoothness", {
+    Text = "Smoothness",
+    Default = smoothness,
+    Min = 0.01,
+    Max = 1,
+    Rounding = 2,
+    Suffix = "",
+    Callback = function(value)
+        smoothness = value
+    end,
+})
+
+CombatGroup:AddSlider("aimbotPrediction", {
+    Text = "Prediction",
+    Default = prediction,
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Suffix = "",
+    Callback = function(value)
+        prediction = value
+    end,
+})
+
+CombatGroup:AddDropdown("aimbotTargetPart", {
+    Values = { "HumanoidRootPart", "Head", "LeftArm", "RightArm" },
+    Default = 1,
+    Multi = false,
+    Text = "Target Part",
+    Tooltip = "Choose part to aim at",
+    Callback = function(value)
+        targetPart = value
+    end,
+})
+
+CombatGroup:AddToggle("orbitToggle", {
+    Text = "Orbit (with Aimbot)",
+    Default = false,
+    Tooltip = "Orbit around target while aimbotting",
+    Callback = function(state)
+        orbitEnabled = state
+        if not state then targetPlayer = nil end
+    end,
+})
+
+CombatGroup:AddSlider("orbitSpeed", {
+    Text = "Orbit Speed",
+    Default = orbitSpeed,
+    Min = 1,
+    Max = 20,
+    Rounding = 0,
+    Suffix = "",
+    Callback = function(value)
+        orbitSpeed = value
+    end,
+})
+
+CombatGroup:AddSlider("orbitRadius", {
+    Text = "Orbit Radius",
+    Default = orbitRadius,
+    Min = 1,
+    Max = 20,
+    Rounding = 0,
+    Suffix = "",
+    Callback = function(value)
+        orbitRadius = value
+    end,
+})
+
+CombatGroup:AddSlider("orbitHeight", {
+    Text = "Orbit Height",
+    Default = orbitHeight,
+    Min = 1,
+    Max = 10,
+    Rounding = 0,
+    Suffix = "",
+    Callback = function(value)
+        orbitHeight = value
+    end,
+})
+
+local RapidGroup = Tabs.Main:AddRightGroupbox("Rapid Fire")
+
+
+-- Global config
+getgenv().config = {
+   enable = false,
+   delay = 0.1
+}
+getgenv().is_firing = false
+
+-- Utility
+local utility = {}
+
+utility.get_gun = function()
+   local char = game.Players.LocalPlayer.Character
+   if not char then return nil end
+   for _, tool in next, char:GetChildren() do
+       if tool:IsA("Tool") and tool:FindFirstChild("Ammo") then
+           return tool
+       end
+   end
+   return nil
+end
+
+utility.rapid = function(tool)
+   if tool and tool.Parent then
+       tool:Activate()
+   end
+end
+
+RapidGroup:AddToggle("RapidFireToggle", {
+   Text = "Rapid Fire",
+   Default = false,
+   Tooltip = "Automatically fires your gun",
+   Callback = function(state)
+       getgenv().config.enable = state
+   end,
+}):AddKeyPicker("RapidFireToggleKey", {
+   Default = "None",
+   SyncToggleState = true,
+   Mode = "Toggle",
+   Text = "Rapid Fire Keybind",
+   Tooltip = "Toggle Rapid Fire with key",
+   Callback = function(state)
+       getgenv().config.enable = state
+   end,
+})
+
+-- Delay slider
+RapidGroup:AddSlider("RapidFireDelay", {
+   Text = "Fire Delay",
+   Min = 0,
+   Max = 0.5,
+   Default = 0.1,
+   Rounding = 2,
+   Tooltip = "Time between shots (seconds)",
+   Callback = function(val)
+       getgenv().config.delay = val
+   end
+})
+
+-- Input Events
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+   if gameProcessed then return end
+   if input.UserInputType == Enum.UserInputType.MouseButton1 then
+       if not getgenv().config.enable then return end
+       if getgenv().is_firing then return end
+       local success, err = pcall(function()
+           local gun = utility.get_gun()
+           if not gun then
+               if library and library.SendNotification then
+                   library:SendNotification("No gun found with Ammo equipped!", 5)
+               end
+               warn("Rapid Fire: No gun found.")
+               return
+           end
+           getgenv().is_firing = true
+           while getgenv().is_firing and getgenv().config.enable do
+               utility.rapid(gun)
+               task.wait(getgenv().config.delay)
+           end
+       end)
+       if not success then
+           warn("Rapid Fire Error: " .. tostring(err))
+           getgenv().is_firing = false
+       end
+   end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+   if input.UserInputType == Enum.UserInputType.MouseButton1 then
+       getgenv().is_firing = false
+   end
+end)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+local RapidFireEnabled = false
+local hyperFireEnabled = false
+local modifiedTools = {}
+
+local function rapidfire(tool)
+    if not RapidFireEnabled then return end
+    if not tool or not tool:FindFirstChild("GunScript") or modifiedTools[tool] then return end
+
+    for _, v in ipairs(getconnections(tool.Activated)) do
+        local funcinfo = debug.getinfo(v.Function)
+        for i = 1, funcinfo.nups do
+            local c = debug.getupvalue(v.Function, i)
+            if type(c) == "number" then
+                debug.setupvalue(v.Function, i, 0.0000000000001)
+            end
+        end
+    end
+
+    modifiedTools[tool] = true
+end
+
+local function onCharacterAdded(character)
+    for _, tool in ipairs(character:GetChildren()) do
+        if tool:IsA("Tool") and tool:FindFirstChild("Handle") then
+            rapidfire(tool)
+        end
+    end
+
+    character.ChildAdded:Connect(function(child)
+        if child:IsA("Tool") and child:FindFirstChild("Handle") then
+            rapidfire(child)
+        end
+    end)
+end
+
+if LocalPlayer.Character then
+    onCharacterAdded(LocalPlayer.Character)
+end
+
+LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+-- RAPID FIRE TOGGLE
+RapidGroup:AddToggle("RapidFireToggle", {
+    Text = "Rapid Fire v2",
+    Default = false,
+    Tooltip = "After toggling off reset pls",
+    Callback = function(Value)
+        RapidFireEnabled = Value
+        modifiedTools = {}
+
+        if Value and LocalPlayer.Character then
+            onCharacterAdded(LocalPlayer.Character)
+        end
+    end
+})
+
+-- HYPER FIRE LOGIC
+local function updateHyperFire()
+    if not hyperFireEnabled then return end
+
+    for _, obj in ipairs(game:GetDescendants()) do
+        if obj.Name == "ToleranceCooldown" and obj:IsA("ValueBase") then
+            obj.Value = 0 
+        end
+    end
+end
+
+-- Only set value to 0 if toggle is on
+game.DescendantAdded:Connect(function(obj)
+    if obj.Name == "ToleranceCooldown" and obj:IsA("ValueBase") then
+        obj.Value = hyperFireEnabled and 0 or obj.Value
+    end
+end)
+
+-- Only auto fire if toggle is on
+RunService.RenderStepped:Connect(function()
+    if hyperFireEnabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+        local character = LocalPlayer.Character
+        if character then
+            local tool = character:FindFirstChildOfClass("Tool")
+            if tool and tool:FindFirstChild("Ammo") then
+                tool:Activate()
+            end
+        end
+    end
+end)
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
+
+-- Variables
+local LocalPlayer = Players.LocalPlayer
+local ESPEnabled = false
+local RainbowESP = false
+local ShowDisplayName = false
+local ShowUsername = false
+local ShowDistanceESP = false
+local ShowBoxESP = false
+
+local ESPObjects = {} -- Store per player: {Main=BillboardGui, Distance=BillboardGui, BoxLines={top,left,right,bottom}}
+
+-- Rainbow Color Generator
+local function getRainbowColor()
+    return Color3.fromHSV(tick() % 5 / 5, 1, 1)
+end
+
+-- Create 2D box lines
+local function createBoxLines()
+    local lines = {}
+    for i = 1, 4 do
+        local line = Drawing.new("Line")
+        line.Visible = false
+        line.Thickness = 2
+        line.Color = Color3.fromRGB(255, 255, 255)
+        lines[i] = line
+    end
+    return lines
+end
+
+-- Update 2D box lines position
+local function updateBoxLines(lines, corners, color)
+    if not lines or #corners < 4 then return end
+    local topLeft, topRight, bottomLeft, bottomRight = unpack(corners)
+
+    lines[1].From = topLeft
+    lines[1].To = topRight
+
+    lines[2].From = topLeft
+    lines[2].To = bottomLeft
+
+    lines[3].From = topRight
+    lines[3].To = bottomRight
+
+    lines[4].From = bottomLeft
+    lines[4].To = bottomRight
+
+    for i = 1, 4 do
+        lines[i].Color = color
+        lines[i].Visible = true
+    end
+end
+
+-- Hide 2D box lines
+local function hideBoxLines(lines)
+    if not lines then return end
+    for i = 1, 4 do
+        lines[i].Visible = false
+    end
+end
+
+-- Get player 2D box corners on screen
+local function getBoxCorners(character)
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local head = character:FindFirstChild("Head")
+    if not hrp or not head then return nil end
+
+    local rootPos = hrp.Position
+    local rootScreenPos, onScreen = Camera:WorldToViewportPoint(rootPos)
+    if not onScreen then return nil end
+
+    local distance = (Camera.CFrame.Position - rootPos).Magnitude
+    if distance == 0 then return nil end
+
+    local height = 3000 / distance
+    local width = height / 2
+
+    local topLeft = Vector2.new(rootScreenPos.X - width / 2, rootScreenPos.Y - height / 2)
+    local topRight = Vector2.new(rootScreenPos.X + width / 2, rootScreenPos.Y - height / 2)
+    local bottomLeft = Vector2.new(rootScreenPos.X - width / 2, rootScreenPos.Y + height / 2)
+    local bottomRight = Vector2.new(rootScreenPos.X + width / 2, rootScreenPos.Y + height / 2)
+
+    return {topLeft, topRight, bottomLeft, bottomRight}
+end
+
+-- Create ESP for a player
+local function createESP(player)
+    if player == LocalPlayer then return end
+    removeESP(player)
+    if not player.Character then return end
+    local head = player.Character:FindFirstChild("Head")
+    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+    if not head or not hrp then return end
+
+    -- Main Billboard
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP"
+    billboard.AlwaysOnTop = true
+    billboard.Size = UDim2.new(0, 200, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 2, 0)
+    billboard.Adornee = head
+    billboard.Parent = head
+
+    local displayNameLabel = Instance.new("TextLabel")
+    displayNameLabel.Name = "DisplayName"
+    displayNameLabel.BackgroundTransparency = 1
+    displayNameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    displayNameLabel.Font = Enum.Font.SourceSansBold
+    displayNameLabel.TextScaled = true
+    displayNameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    displayNameLabel.TextStrokeTransparency = 0.5
+    displayNameLabel.Text = player.DisplayName
+    displayNameLabel.Visible = ShowDisplayName
+    displayNameLabel.Parent = billboard
+
+    local usernameLabel = Instance.new("TextLabel")
+    usernameLabel.Name = "Username"
+    usernameLabel.BackgroundTransparency = 1
+    usernameLabel.Position = UDim2.new(0, 0, 0.5, 0)
+    usernameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    usernameLabel.Font = Enum.Font.SourceSans
+    usernameLabel.TextScaled = true
+    usernameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    usernameLabel.TextStrokeTransparency = 0.5
+    usernameLabel.Text = player.Name
+    usernameLabel.Visible = ShowUsername
+    usernameLabel.Parent = billboard
+
+    -- Distance Billboard
+    local distanceBillboard = Instance.new("BillboardGui")
+    distanceBillboard.Name = "DistanceESP"
+    distanceBillboard.AlwaysOnTop = true
+    distanceBillboard.Size = UDim2.new(0, 200, 0, 20)
+    distanceBillboard.StudsOffset = Vector3.new(0, -3, 0)
+    distanceBillboard.Adornee = hrp
+    distanceBillboard.Parent = hrp
+
+    local distanceLabel = Instance.new("TextLabel")
+    distanceLabel.Name = "Distance"
+    distanceLabel.BackgroundTransparency = 1
+    distanceLabel.Size = UDim2.new(1, 0, 1, 0)
+    distanceLabel.Font = Enum.Font.SourceSansItalic
+    distanceLabel.TextScaled = true
+    distanceLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    distanceLabel.TextStrokeTransparency = 0.5
+    distanceLabel.Text = "0 studs"
+    distanceLabel.Visible = ShowDistanceESP
+    distanceLabel.Parent = distanceBillboard
+
+    local boxLines = createBoxLines()
+
+    ESPObjects[player] = {
+        Main = billboard,
+        Distance = distanceBillboard,
+        BoxLines = boxLines
+    }
+end
+
+-- Remove ESP
+function removeESP(player)
+    if ESPObjects[player] then
+        if ESPObjects[player].Main then ESPObjects[player].Main:Destroy() end
+        if ESPObjects[player].Distance then ESPObjects[player].Distance:Destroy() end
+        if ESPObjects[player].BoxLines then hideBoxLines(ESPObjects[player].BoxLines) end
+        ESPObjects[player] = nil
+    end
+end
+
+-- Update all ESPs
+local function updateAllESP()
+    for _, player in ipairs(Players:GetPlayers()) do
+        removeESP(player)
+        if ESPEnabled then
+            createESP(player)
+        end
+    end
+end
+
+-- Update ESP visuals
+RunService.RenderStepped:Connect(function()
+    if not ESPEnabled then return end
+    for player, guis in pairs(ESPObjects) do
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = player.Character.HumanoidRootPart
+            local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude)
+            if guis.Distance and guis.Distance:FindFirstChild("Distance") then
+                guis.Distance.Distance.Text = dist .. " studs"
+                guis.Distance.Distance.Visible = ShowDistanceESP
+            end
+
+            local color = RainbowESP and getRainbowColor() or Color3.fromRGB(255, 255, 255)
+
+            if guis.Main then
+                if guis.Main:FindFirstChild("DisplayName") then
+                    guis.Main.DisplayName.TextColor3 = color
+                    guis.Main.DisplayName.Visible = ShowDisplayName
+                end
+                if guis.Main:FindFirstChild("Username") then
+                    guis.Main.Username.TextColor3 = color
+                    guis.Main.Username.Visible = ShowUsername
+                end
+            end
+
+            if guis.Distance and guis.Distance:FindFirstChild("Distance") then
+                guis.Distance.Distance.TextColor3 = color
+            end
+
+            if guis.BoxLines then
+                if ShowBoxESP then
+                    local corners = getBoxCorners(player.Character)
+                    if corners then
+                        updateBoxLines(guis.BoxLines, corners, color)
+                    else
+                        hideBoxLines(guis.BoxLines)
+                    end
+                else
+                    hideBoxLines(guis.BoxLines)
+                end
+            end
+        else
+            if guis.BoxLines then
+                hideBoxLines(guis.BoxLines)
+            end
+        end
+    end
+end)
+
+-- CharacterAdded hook for all players (persistent ESP on respawn)
+local function hookCharacterAdded(player)
+    player.CharacterAdded:Connect(function()
+        if ESPEnabled then
+            task.wait(1)
+            createESP(player)
+        end
+    end)
+end
+
+-- Existing players
+for _, player in ipairs(Players:GetPlayers()) do
+    if player ~= LocalPlayer then
+        hookCharacterAdded(player)
+        if player.Character and ESPEnabled then
+            task.wait(1)
+            createESP(player)
+        end
+    end
+end
+
+-- New players
+Players.PlayerAdded:Connect(function(player)
+    hookCharacterAdded(player)
+    if player.Character and ESPEnabled then
+        task.wait(1)
+        createESP(player)
+    end
+end)
+
+Players.PlayerRemoving:Connect(removeESP)
+
+-- UI Setup (assumes Tabs.Visuals is defined in your UI lib)
+local EspGroup = Tabs.Main:AddLeftGroupbox('Esp')
+
+EspGroup:AddToggle("ToggleESP", {
+    Text = "Enable ESP",
+    Default = false,
+    Callback = function(Value)
+        ESPEnabled = Value
+        updateAllESP()
+    end
+})
+
+EspGroup:AddToggle("DisplayNameESP", {
+    Text = "DisplayName",
+    Default = false,
+    Callback = function(Value)
+        ShowDisplayName = Value
+    end
+})
+
+EspGroup:AddToggle("UsernameESP", {
+    Text = "Username",
+    Default = false,
+    Callback = function(Value)
+        ShowUsername = Value
+    end
+})
+
+EspGroup:AddToggle("DistanceESP", {
+    Text = "Distance",
+    Default = false,
+    Callback = function(Value)
+        ShowDistanceESP = Value
+    end
+})
+
+EspGroup:AddToggle("BoxESP", {
+    Text = "Boxes",
+    Default = false,
+    Callback = function(Value)
+        ShowBoxESP = Value
+    end
+})
+
+EspGroup:AddToggle("RainbowESP", {
+    Text = "Rainbow ESP",
+    Default = false,
+    Callback = function(Value)
+        RainbowESP = Value
+    end
+})
