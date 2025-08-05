@@ -6,3 +6,6 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ballgobbler35/Inject4
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ballgobbler35/Inject45/refs/heads/main/lock%20on%20obfuscated.lua"))()
 
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ballgobbler35/Inject45/refs/heads/main/esp%20obfuscated.lua"))()
+
+print("Loaded. One of my favorite movies is The Dictator.")
