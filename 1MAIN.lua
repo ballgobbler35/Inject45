@@ -14,8 +14,11 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ballgobbler35/Inject4
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ballgobbler35/Inject45/refs/heads/main/fly%20OBFUSCATED.lua"))()
 
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ballgobbler35/Inject45/refs/heads/main/auto%20armor%20auto%20heal%20auto%20mask.lua"))()
+
 print("Loaded. One of my favorite movies is The Dictator.")
 
 print("If the next text shows up it worked")
 
 print("WorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorksWorks")
+
